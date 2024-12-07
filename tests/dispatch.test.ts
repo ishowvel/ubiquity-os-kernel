@@ -38,6 +38,7 @@ jest.mock("../src/github/types/plugin", () => {
           authToken: this.authToken,
           ref: this.ref,
           signature: "",
+          command: this.command,
         };
       }
     },
@@ -141,7 +142,16 @@ describe("handleEvent", () => {
     const payloadString = JSON.stringify(payload);
     const signature = calculateSignature(payloadString, secret);
 
-    const req = new Request("http://localhost:8080", {
+    process.env = {
+      ENVIRONMENT: "production",
+      APP_WEBHOOK_SECRET: secret,
+      APP_ID: "1",
+      APP_PRIVATE_KEY: "1234",
+      OPENAI_API_KEY: "token",
+    };
+
+    const app = (await import("../src/kernel")).app;
+    const res = await app.request("http://localhost:8080", {
       method: "POST",
       headers: {
         "x-github-event": "issue_comment.created",
@@ -152,18 +162,10 @@ describe("handleEvent", () => {
       body: payloadString,
     });
 
-    const worker = (await import("../src/worker")).default;
-    const res = await worker.fetch(req, {
-      ENVIRONMENT: "production",
-      APP_WEBHOOK_SECRET: secret,
-      APP_ID: "1",
-      APP_PRIVATE_KEY: "1234",
-      PLUGIN_CHAIN_STATE: {} as KVNamespace,
-    });
-
     expect(res).toBeTruthy();
     // 2 calls means the execution didn't break
     expect(dispatchWorker).toHaveBeenCalledTimes(2);
+
     dispatchWorker.mockReset();
   });
 });
